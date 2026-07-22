@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — Uber Demand Prediction</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
+  <link href="/static/css/style.css" rel="stylesheet">
+</head>
+<body>
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="brand-mark mb-1"><span class="dot"></span> Uber<span class="text-muted-uber">Demand</span></div>
+    <p class="text-muted-uber mb-4">Real-time demand, fare & cancellation intelligence for drivers.</p>
+
+    <ul class="nav nav-pills mb-4" id="authTabs">
+      <li class="nav-item flex-fill">
+        <button class="nav-link nav-link-uber active w-100" id="loginTabBtn" onclick="showTab('login')">Sign in</button>
+      </li>
+      <li class="nav-item flex-fill">
+        <button class="nav-link nav-link-uber w-100" id="registerTabBtn" onclick="showTab('register')">Create account</button>
+      </li>
+    </ul>
+
+    <div id="alertBox" class="alert d-none py-2 px-3 small" role="alert"></div>
+
+    <!-- LOGIN FORM -->
+    <form id="loginForm">
+      <div class="mb-3">
+        <label class="form-label-uber">Username</label>
+        <input type="text" class="form-control form-control-uber" id="loginUsername" required autocomplete="username">
+      </div>
+      <div class="mb-3">
+        <label class="form-label-uber">Password</label>
+        <input type="password" class="form-control form-control-uber" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-uber-primary w-100 mt-2" id="loginBtn">
+        Sign in
+      </button>
+    </form>
+
+    <!-- REGISTER FORM -->
+    <form id="registerForm" class="d-none">
+      <div class="mb-3">
+        <label class="form-label-uber">Full name</label>
+        <input type="text" class="form-control form-control-uber" id="registerFullName">
+      </div>
+      <div class="mb-3">
+        <label class="form-label-uber">Username</label>
+        <input type="text" class="form-control form-control-uber" id="registerUsername" required minlength="3">
+      </div>
+      <div class="mb-3">
+        <label class="form-label-uber">Email</label>
+        <input type="email" class="form-control form-control-uber" id="registerEmail" required>
+      </div>
+      <div class="mb-3">
+        <label class="form-label-uber">Password</label>
+        <input type="password" class="form-control form-control-uber" id="registerPassword" required minlength="6">
+      </div>
+      <button type="submit" class="btn btn-uber-primary w-100 mt-2" id="registerBtn">
+        Create account
+      </button>
+    </form>
+
+    <p class="text-muted-uber small mt-4 mb-0">
+      <i class="fa-solid fa-shield-halved me-1"></i> Secured with bcrypt hashing & JWT sessions.
+    </p>
+  </div>
+</div>
+
+<script>
+function showTab(tab) {
+  document.getElementById('loginForm').classList.toggle('d-none', tab !== 'login');
+  document.getElementById('registerForm').classList.toggle('d-none', tab !== 'register');
+  document.getElementById('loginTabBtn').classList.toggle('active', tab === 'login');
+  document.getElementById('registerTabBtn').classList.toggle('active', tab === 'register');
+  document.getElementById('alertBox').classList.add('d-none');
+}
+
+function showAlert(message, type = 'danger') {
+  const box = document.getElementById('alertBox');
+  box.textContent = message;
+  box.className = `alert alert-${type} py-2 px-3 small`;
+}
+
+function setButtonLoading(btn, loading, label) {
+  btn.disabled = loading;
+  btn.innerHTML = loading ? '<span class="spinner-uber me-2"></span>Please wait…' : label;
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('loginBtn');
+  setButtonLoading(btn, true, 'Sign in');
+  try {
+    const res = await fetch('/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('loginUsername').value,
+        password: document.getElementById('loginPassword').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Login failed');
+    localStorage.setItem('access_token', data.access_token);
+    localStorage.setItem('username', data.username);
+    window.location.href = '/dashboard';
+  } catch (err) {
+    showAlert(err.message);
+  } finally {
+    setButtonLoading(btn, false, 'Sign in');
+  }
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('registerBtn');
+  setButtonLoading(btn, true, 'Create account');
+  try {
+    const res = await fetch('/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: document.getElementById('registerUsername').value,
+        email: document.getElementById('registerEmail').value,
+        password: document.getElementById('registerPassword').value,
+        full_name: document.getElementById('registerFullName').value,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Registration failed');
+    localStorage.setItem('access_token', data.access_token);
+    localStorage.setItem('username', data.username);
+    window.location.href = '/dashboard';
+  } catch (err) {
+    showAlert(err.message);
+  } finally {
+    setButtonLoading(btn, false, 'Create account');
+  }
+});
+
+// Redirect to dashboard automatically if already logged in
+if (localStorage.getItem('access_token')) {
+  window.location.href = '/dashboard';
+}
+</script>
+</body>
+</html>

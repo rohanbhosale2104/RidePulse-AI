@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+{% block title %}Predictor — Uber Demand Prediction{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+  <div class="section-eyebrow mb-1">Inference</div>
+  <h2 class="mb-0">Ride Demand Predictor</h2>
+  <p class="text-muted-uber mt-1">Enter ride details to estimate demand level, fare, and cancellation risk in real time.</p>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card-uber">
+      <form id="predictForm">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label-uber">Vehicle type</label>
+            <select class="form-select form-select-uber" id="vehicleType" required>
+              <option value="UberX">UberX</option>
+              <option value="UberXL">UberXL</option>
+              <option value="Uber Auto">Uber Auto</option>
+              <option value="Uber Premier">Uber Premier</option>
+              <option value="Uber Go">Uber Go</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-uber">Payment method</label>
+            <select class="form-select form-select-uber" id="paymentMethod" required>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Uber Cash">Uber Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="Cash">Cash</option>
+              <option value="Debit Card">Debit Card</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label-uber">Pickup location</label>
+            <select class="form-select form-select-uber" id="pickupLocation" required>
+              <option value="Airport">Airport</option>
+              <option value="Downtown">Downtown</option>
+              <option value="Suburbs">Suburbs</option>
+              <option value="Tech Park">Tech Park</option>
+              <option value="Train Station">Train Station</option>
+              <option value="Shopping Mall">Shopping Mall</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-uber">Drop location</label>
+            <select class="form-select form-select-uber" id="dropLocation" required>
+              <option value="Downtown">Downtown</option>
+              <option value="Airport">Airport</option>
+              <option value="Suburbs">Suburbs</option>
+              <option value="Tech Park">Tech Park</option>
+              <option value="Train Station">Train Station</option>
+              <option value="Shopping Mall">Shopping Mall</option>
+            </select>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label-uber">Ride distance (km)</label>
+            <input type="number" step="0.1" min="0.1" class="form-control form-control-uber" id="rideDistance" value="8.5" required>
+          </div>
+          <div class="col-md-6"></div>
+
+          <div class="col-md-6">
+            <label class="form-label-uber">Avg. VTAT (min)</label>
+            <input type="number" step="0.1" min="0" class="form-control form-control-uber" id="avgVtat" value="5.2" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-uber">Avg. CTAT (min)</label>
+            <input type="number" step="0.1" min="0" class="form-control form-control-uber" id="avgCtat" value="12.4" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label-uber">Driver rating</label>
+            <input type="number" step="0.1" min="1" max="5" class="form-control form-control-uber" id="driverRating" value="4.7" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-uber">Customer rating</label>
+            <input type="number" step="0.1" min="1" max="5" class="form-control form-control-uber" id="customerRating" value="4.5" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label-uber">Date</label>
+            <input type="date" class="form-control form-control-uber" id="rideDate" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label-uber">Time</label>
+            <input type="time" class="form-control form-control-uber" id="rideTime" required>
+          </div>
+        </div>
+
+        <div id="predictAlert" class="alert d-none py-2 px-3 small mt-3"></div>
+
+        <button type="submit" class="btn btn-uber-primary w-100 mt-4" id="predictBtn">
+          <i class="fa-solid fa-bolt me-1"></i> Run Prediction
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card-uber h-100" id="resultCard">
+      <div class="section-eyebrow mb-1">Result</div>
+      <h5 class="mb-3">Prediction Output</h5>
+
+      <div id="resultEmpty" class="text-center text-muted-uber py-5">
+        <i class="fa-solid fa-wand-magic-sparkles fa-2x mb-3 d-block"></i>
+        Submit the form to see demand, fare & risk estimates.
+      </div>
+
+      <div id="resultContent" class="d-none">
+        <div class="d-flex align-items-center justify-content-between mb-4">
+          <div>
+            <div class="text-muted-uber small text-uppercase mb-1">Demand level</div>
+            <span class="badge-uber" id="demandBadge">—</span>
+          </div>
+          <div class="text-end">
+            <div class="text-muted-uber small text-uppercase mb-1">Estimated fare</div>
+            <div class="kpi-value" id="fareValue" style="font-size:1.6rem;">—</div>
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <div class="d-flex justify-content-between mb-1">
+            <span class="text-muted-uber small text-uppercase">Cancellation risk</span>
+            <span class="small fw-semibold" id="cancelPercentLabel">—</span>
+          </div>
+          <div class="risk-bar-track">
+            <div class="risk-bar-fill" id="cancelBarFill" style="width:0%; background: var(--color-amber);"></div>
+          </div>
+        </div>
+
+        <div class="mb-4" id="demandProbaWrap">
+          <div class="text-muted-uber small text-uppercase mb-2">Demand probability breakdown</div>
+          <div id="demandProbaRows"></div>
+        </div>
+
+        <div class="card-uber" style="background-color: var(--color-bg-elevated);">
+          <div class="text-muted-uber small text-uppercase mb-2"><i class="fa-solid fa-route me-1"></i>Driver recommendation</div>
+          <div id="recommendationText" class="small"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+requireAuth();
+setUsernameLabel();
+
+// Default date/time to now
+(function initDefaults() {
+  const now = new Date();
+  document.getElementById('rideDate').value = now.toISOString().split('T')[0];
+  document.getElementById('rideTime').value = now.toTimeString().slice(0, 5);
+})();
+
+function badgeClassFor(level) {
+  return `badge-demand-${level.toLowerCase()}`;
+}
+
+document.getElementById('predictForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('predictBtn');
+  const alertBox = document.getElementById('predictAlert');
+  alertBox.classList.add('d-none');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-uber me-2"></span>Running inference…';
+
+  const payload = {
+    vehicle_type: document.getElementById('vehicleType').value,
+    pickup_location: document.getElementById('pickupLocation').value,
+    drop_location: document.getElementById('dropLocation').value,
+    payment_method: document.getElementById('paymentMethod').value,
+    ride_distance: parseFloat(document.getElementById('rideDistance').value),
+    avg_vtat: parseFloat(document.getElementById('avgVtat').value),
+    avg_ctat: parseFloat(document.getElementById('avgCtat').value),
+    driver_rating: parseFloat(document.getElementById('driverRating').value),
+    customer_rating: parseFloat(document.getElementById('customerRating').value),
+    date: document.getElementById('rideDate').value,
+    time: document.getElementById('rideTime').value,
+  };
+
+  try {
+    const result = await apiPost('/api/v1/predict', payload);
+
+    document.getElementById('resultEmpty').classList.add('d-none');
+    document.getElementById('resultContent').classList.remove('d-none');
+
+    const badge = document.getElementById('demandBadge');
+    badge.textContent = result.demand_level;
+    badge.className = `badge-uber ${badgeClassFor(result.demand_level)}`;
+
+    document.getElementById('fareValue').textContent = '$' + result.estimated_fare.toFixed(2);
+
+    const pct = (result.cancellation_probability * 100).toFixed(1);
+    document.getElementById('cancelPercentLabel').textContent = pct + '%';
+    const fill = document.getElementById('cancelBarFill');
+    fill.style.width = pct + '%';
+    fill.style.background = result.cancellation_probability >= 0.5 ? 'var(--color-red)' : (result.cancellation_probability >= 0.25 ? 'var(--color-amber)' : 'var(--color-green)');
+
+    const probaWrap = document.getElementById('demandProbaRows');
+    probaWrap.innerHTML = '';
+    if (result.demand_probabilities) {
+      Object.entries(result.demand_probabilities).forEach(([label, prob]) => {
+        const pctVal = (prob * 100).toFixed(1);
+        probaWrap.innerHTML += `
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small">${label}</span>
+            <span class="small text-muted-uber">${pctVal}%</span>
+          </div>
+          <div class="risk-bar-track mb-2">
+            <div class="risk-bar-fill" style="width:${pctVal}%; background: var(--color-cyan);"></div>
+          </div>`;
+      });
+    }
+
+    document.getElementById('recommendationText').textContent = result.driver_recommendation;
+  } catch (err) {
+    alertBox.textContent = err.message || 'Prediction failed.';
+    alertBox.className = 'alert alert-danger py-2 px-3 small mt-3';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-bolt me-1"></i> Run Prediction';
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Uber Demand Prediction{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-4">
+  <div>
+    <div class="section-eyebrow mb-1">Live overview</div>
+    <h2 class="mb-0">Demand Analytics Dashboard</h2>
+  </div>
+  <button class="btn btn-uber-outline btn-sm" id="refreshBtn"><i class="fa-solid fa-rotate me-1"></i>Refresh</button>
+</div>
+
+<!-- KPI CARDS -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-accent kpi-accent-amber"></div>
+      <div class="kpi-label">Total Rides</div>
+      <div class="kpi-value" id="kpiTotalRides">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-accent kpi-accent-green"></div>
+      <div class="kpi-label">Total Revenue</div>
+      <div class="kpi-value" id="kpiTotalRevenue">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-accent kpi-accent-cyan"></div>
+      <div class="kpi-label">Avg. Fare</div>
+      <div class="kpi-value" id="kpiAvgFare">—</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="kpi-card">
+      <div class="kpi-accent kpi-accent-red"></div>
+      <div class="kpi-label">Cancellation Rate</div>
+      <div class="kpi-value" id="kpiCancelRate">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-lg-8">
+    <div class="card-uber h-100">
+      <div class="section-eyebrow mb-1">Trend</div>
+      <h5 class="mb-3">Hourly Demand Volume</h5>
+      <canvas id="hourlyDemandChart" height="120"></canvas>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card-uber h-100">
+      <div class="section-eyebrow mb-1">Breakdown</div>
+      <h5 class="mb-3">Vehicle Type Share</h5>
+      <canvas id="vehicleChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card-uber h-100">
+      <div class="section-eyebrow mb-1">Geography</div>
+      <h5 class="mb-3">Pickup Hotspots</h5>
+      <div id="hotspotMap"></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card-uber h-100">
+      <div class="section-eyebrow mb-1">Distribution</div>
+      <h5 class="mb-3">Demand Level Split</h5>
+      <canvas id="demandLevelChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <div class="card-uber">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <div class="section-eyebrow mb-1">Activity</div>
+          <h5 class="mb-0">My Recent Predictions</h5>
+        </div>
+        <a href="/predict" class="btn btn-uber-primary btn-sm"><i class="fa-solid fa-plus me-1"></i>New Prediction</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-dark table-hover align-middle mb-0" style="--bs-table-bg: transparent;">
+          <thead>
+            <tr class="text-muted-uber small text-uppercase">
+              <th>Time</th>
+              <th>Route</th>
+              <th>Vehicle</th>
+              <th>Demand</th>
+              <th>Fare</th>
+              <th>Cancel Risk</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody">
+            <tr><td colspan="6" class="text-center text-muted-uber py-4">Loading history…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/app.js"></script>
+<script>
+requireAuth();
+setUsernameLabel();
+
+let hourlyChartInstance, vehicleChartInstance, demandChartInstance, mapInstance;
+
+async function loadStats() {
+  try {
+    const stats = await apiGet('/api/v1/analytics/stats');
+    renderKPIs(stats);
+    renderHourlyChart(stats.hourly_demand);
+    renderVehicleChart(stats.vehicle_breakdown);
+    renderDemandChart(stats.demand_breakdown);
+    renderMap(stats.location_hotspots);
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+function renderKPIs(stats) {
+  document.getElementById('kpiTotalRides').textContent = stats.total_rides.toLocaleString();
+  document.getElementById('kpiTotalRevenue').textContent = '$' + stats.total_revenue.toLocaleString(undefined, {maximumFractionDigits: 2});
+  document.getElementById('kpiAvgFare').textContent = '$' + stats.avg_fare.toFixed(2);
+  document.getElementById('kpiCancelRate').textContent = stats.cancellation_rate.toFixed(1) + '%';
+}
+
+function renderHourlyChart(hourlyData) {
+  const labels = Array.from({length: 24}, (_, i) => `${i}:00`);
+  const counts = new Array(24).fill(0);
+  hourlyData.forEach(h => { counts[h.hour] = h.count; });
+
+  const ctx = document.getElementById('hourlyDemandChart');
+  if (hourlyChartInstance) hourlyChartInstance.destroy();
+  hourlyChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Predictions',
+        data: counts,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,0.12)',
+        fill: true,
+        tension: 0.35,
+        pointRadius: 2,
+      }]
+    },
+    options: chartBaseOptions()
+  });
+}
+
+function renderVehicleChart(vehicleData) {
+  const ctx = document.getElementById('vehicleChart');
+  if (vehicleChartInstance) vehicleChartInstance.destroy();
+  vehicleChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: vehicleData.map(v => v.vehicle_type),
+      datasets: [{
+        data: vehicleData.map(v => v.count),
+        backgroundColor: ['#f5a623', '#2dd4c8', '#3ecf8e', '#ef5959', '#8b7ffb'],
+        borderColor: '#1a1e23',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      plugins: { legend: { labels: { color: '#9aa4af' } } },
+      responsive: true,
+    }
+  });
+}
+
+function renderDemandChart(demandData) {
+  const colorMap = { Low: '#3ecf8e', Medium: '#f5a623', High: '#ef5959' };
+  const ctx = document.getElementById('demandLevelChart');
+  if (demandChartInstance) demandChartInstance.destroy();
+  demandChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: demandData.map(d => d.demand_level),
+      datasets: [{
+        label: 'Predictions',
+        data: demandData.map(d => d.count),
+        backgroundColor: demandData.map(d => colorMap[d.demand_level] || '#9aa4af'),
+        borderRadius: 6,
+      }]
+    },
+    options: chartBaseOptions(true)
+  });
+}
+
+function chartBaseOptions(hideLegend) {
+  return {
+    responsive: true,
+    plugins: { legend: { display: !hideLegend, labels: { color: '#9aa4af' } } },
+    scales: {
+      x: { ticks: { color: '#5f6a75' }, grid: { color: '#262b31' } },
+      y: { ticks: { color: '#5f6a75' }, grid: { color: '#262b31' }, beginAtZero: true }
+    }
+  };
+}
+
+function renderMap(hotspots) {
+  if (mapInstance) mapInstance.remove();
+  mapInstance = L.map('hotspotMap', { attributionControl: false }).setView([12.9716, 77.5946], 11);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+  }).addTo(mapInstance);
+
+  const maxCount = Math.max(1, ...hotspots.map(h => h.count));
+  hotspots.forEach(h => {
+    const radius = 8 + (h.count / maxCount) * 22;
+    const circle = L.circleMarker([h.lat, h.lng], {
+      radius,
+      color: '#f5a623',
+      fillColor: '#f5a623',
+      fillOpacity: 0.35,
+      weight: 1.5,
+    }).addTo(mapInstance);
+    circle.bindPopup(`<strong>${h.location}</strong><br>Rides: ${h.count}<br>Avg fare: $${h.avg_fare.toFixed(2)}`);
+  });
+}
+
+async function loadHistory() {
+  const tbody = document.getElementById('historyTableBody');
+  try {
+    const data = await apiGet('/api/v1/history?limit=15');
+    if (!data.predictions.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted-uber py-4">No predictions yet. Try the Predictor.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.predictions.map(p => `
+      <tr>
+        <td class="text-muted-uber small">${new Date(p.created_at).toLocaleString()}</td>
+        <td>${p.pickup_location} <i class="fa-solid fa-arrow-right-long mx-1 text-muted-uber"></i> ${p.drop_location}</td>
+        <td>${p.vehicle_type}</td>
+        <td><span class="badge-uber badge-demand-${p.demand_level.toLowerCase()}">${p.demand_level}</span></td>
+        <td>$${p.estimated_fare.toFixed(2)}</td>
+        <td>${(p.cancellation_probability * 100).toFixed(1)}%</td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">Failed to load history.</td></tr>';
+  }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  loadStats();
+  loadHistory();
+});
+
+loadStats();
+loadHistory();
+</script>
+{% endblock %}
